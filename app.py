@@ -1,17 +1,10 @@
-import asyncio
-import json
-import os
-import re
-import sqlite3
-import time
-import random
-import threading
+import json, os, re, sqlite3, time, random, threading
 from datetime import datetime, timezone
-from urllib.parse import urlparse
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
-from playwright.sync_api import sync_playwright
+import requests
+from bs4 import BeautifulSoup
 
 app = Flask(__name__, static_folder='static')
 CORS(app)
@@ -19,7 +12,15 @@ CORS(app)
 DB_PATH = "seen.db"
 LISTINGS_PATH = "listings.json"
 
-SEARCH_URL = "https://www.airbnb.fr/s/Aix-en-Provence--France/homes?refinement_paths%5B%5D=%2Fhomes&room_types%5B%5D=Entire%20home%2Fapt&price_min=100&ne_lat=43.536&ne_lng=5.456&sw_lat=43.524&sw_lng=5.438&zoom=15&search_type=MAP"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "fr-FR,fr;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+}
+
+BASE_URL = "https://www.airbnb.fr/s/Aix-en-Provence--France/homes?refinement_paths%5B%5D=%2Fhomes&room_types%5B%5D=Entire%20home%2Fapt&price_min=100&ne_lat=43.536&ne_lng=5.456&sw_lat=43.524&sw_lng=5.438&zoom=15&search_type=MAP"
 
 def init_db():
     con = sqlite3.connect(DB_PATH)
@@ -56,176 +57,71 @@ def save_listings(listings):
     with open(LISTINGS_PATH, "w") as f:
         json.dump(listings, f)
 
-def extract_listing_id(url):
-    try:
-        path = urlparse(url).path
-        m = re.search(r"/rooms/(\d+)", path)
-        return m.group(1) if m else None
-    except:
-        return None
-
-def has_new_badge(text):
-    if not text:
-        return False
-    t = text.lower()
-    return "nouveau" in t or "new" in t
-
-def extract_review_count(text):
-    if not text:
-        return None
-    t = " ".join(text.split())
-    m = re.search(r"\b(\d{1,4})\s*(commentaires|avis|reviews)\b", t, re.IGNORECASE)
-    if m:
-        return int(m.group(1))
-    m2 = re.search(r"\((\d{1,4})\)", t)
-    if m2:
-        return int(m2.group(1))
-    return None
-
-def extract_image(card):
-    try:
-        img = card.query_selector("img")
-        if img:
-            src = img.get_attribute("src")
-            if src:
-                return src
-    except:
-        pass
-    return None
-
-def extract_price(text):
-    if not text:
-        return None
-    m = re.search(r"(\d[\d\s]*)\s*€", text)
-    if m:
-        return m.group(0).strip()
-    return None
-
 def scrape(mode="new"):
-    print(f"[scrape] Démarrage mode={mode}")
+    print(f"[scrape] mode={mode}")
     results = []
-    url = SEARCH_URL
-    if mode == "few":
-        url = SEARCH_URL + "&max_reviews=15"
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-            viewport={"width": 1440, "height": 900},
-            locale="fr-FR",
-            timezone_id="Europe/Paris",
-        )
-        page = context.new_page()
-
-        for attempt in range(2):
-            try:
-                page.goto(url, timeout=120000, wait_until="domcontentloaded")
-                break
-            except:
-                if attempt == 1:
-                    browser.close()
-                    return []
-                time.sleep(2)
-
-        page.wait_for_timeout(random.randint(1500, 3000))
-        page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.6)")
-        page.wait_for_timeout(800)
-
-        visited = 0
-        seen_urls = set()
-
-        while visited < 20:
-            visited += 1
-            try:
-                page.wait_for_selector("a[href*='/rooms/']", timeout=30000)
-            except:
-                break
-
-            anchors = page.locator("a[href*='/rooms/']").element_handles()
-            for a in anchors:
-                try:
-                    href = a.get_attribute("href")
-                    if not href or "/rooms/" not in href:
-                        continue
-                    url_clean = href.split("?")[0]
-                    if url_clean in seen_urls:
-                        continue
-                    seen_urls.add(url_clean)
-
-                    lid = extract_listing_id(url_clean)
-                    if not lid:
-                        continue
-
-                    card = a.evaluate_handle("(el) => el.closest('article') || el.closest('div[data-testid]') || el.parentElement")
-                    txt = ""
-                    try:
-                        txt = card.evaluate("(el) => el.innerText || ''")
-                    except:
-                        pass
-
-                    is_new = has_new_badge(txt)
-                    reviews = extract_review_count(txt)
-                    price = extract_price(txt)
-
-                    # Filtre selon le mode
-                    if mode == "new" and not is_new:
-                        continue
-                    if mode == "few" and (reviews is None or reviews > 15):
-                        continue
-
-                    # Image de couverture
-                    image = None
-                    try:
-                        img_el = card.evaluate_handle("(el) => el.querySelector('img')")
-                        image = img_el.evaluate("(el) => el ? el.src : null")
-                    except:
-                        pass
-
-                    results.append({
-                        "id": lid,
-                        "url": f"https://www.airbnb.fr/rooms/{lid}",
-                        "is_new": is_new,
-                        "reviews": reviews,
-                        "price": price,
-                        "image": image,
-                        "mode": mode,
-                        "detectedAt": datetime.now().strftime("%d/%m %H:%M"),
-                    })
-                except:
-                    continue
-
-            # Page suivante
-            next_clicked = False
-            for sel in ["[data-testid='pagination-right']", "button[aria-label*='Suivant']", "button[aria-label*='Next']"]:
-                try:
-                    btn = page.locator(sel)
-                    if btn.count() > 0:
-                        disabled = btn.get_attribute("disabled")
-                        if disabled is not None:
-                            break
-                        page.wait_for_timeout(random.randint(500, 1500))
-                        btn.first.click()
-                        page.wait_for_timeout(2000)
-                        page.evaluate("window.scrollTo(0, document.body.scrollHeight * 0.6)")
-                        page.wait_for_timeout(600)
-                        next_clicked = True
-                        break
-                except:
-                    continue
-            if not next_clicked:
-                break
-
-        browser.close()
-
-    print(f"[scrape] {len(results)} annonces trouvées mode={mode}")
+    seen_ids = set()
+    
+    for page in range(5):
+        delay = random.uniform(6, 18)
+        print(f"[scrape] page {page+1} attente {delay:.0f}s")
+        time.sleep(delay)
+        
+        url = BASE_URL + f"&items_offset={page*18}"
+        if mode == "few":
+            url += "&max_reviews=15"
+        
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=20)
+            print(f"[scrape] status={r.status_code}")
+            
+            # Cherche les données JSON dans la page
+            soup = BeautifulSoup(r.text, "html.parser")
+            
+            # Cherche le script contenant les données
+            for script in soup.find_all("script"):
+                txt = script.string or ""
+                if '"listing"' in txt and '"id"' in txt:
+                    # Extraire les IDs des annonces
+                    ids = re.findall(r'"id"\s*:\s*"?(\d{10,})"?', txt)
+                    images = re.findall(r'https://a0\.muscache\.com/im/pictures/[^"\']+', txt)
+                    prices = re.findall(r'"amount"\s*:\s*(\d+)', txt)
+                    reviews = re.findall(r'"reviewsCount"\s*:\s*(\d+)', txt)
+                    
+                    for i, lid in enumerate(ids):
+                        if lid in seen_ids:
+                            continue
+                        rev = int(reviews[i]) if i < len(reviews) else None
+                        
+                        if mode == "new" and (rev is None or rev > 0):
+                            continue
+                        if mode == "few" and (rev is None or rev > 15):
+                            continue
+                        
+                        seen_ids.add(lid)
+                        results.append({
+                            "id": lid,
+                            "url": f"https://www.airbnb.fr/rooms/{lid}",
+                            "is_new": rev == 0 or rev is None,
+                            "reviews": rev,
+                            "price": f"{prices[i]}€" if i < len(prices) else None,
+                            "image": images[i] if i < len(images) else None,
+                            "mode": mode,
+                            "detectedAt": datetime.now().strftime("%d/%m %H:%M"),
+                        })
+                    break
+                        
+        except Exception as e:
+            print(f"[scrape] erreur page {page}: {e}")
+    
+    print(f"[scrape] {len(results)} annonces mode={mode}")
     return results
 
 def full_scan():
-    print("[scan] Démarrage scan complet")
+    print("[scan] Démarrage")
     seen = load_seen()
     all_listings = load_listings()
-
+    
     for mode in ["new", "few"]:
         results = scrape(mode)
         new_ones = [r for r in results if r["id"] not in seen]
@@ -235,14 +131,11 @@ def full_scan():
                 all_listings.insert(0, l)
             save_seen([l["id"] for l in new_ones])
             print(f"[scan] {len(new_ones)} nouvelles annonces mode={mode}")
-
+    
     save_listings(all_listings[:200])
     print("[scan] Terminé")
 
-# Init
 init_db()
-
-# Scheduler 8h, 12h, 17h
 scheduler = BackgroundScheduler()
 scheduler.add_job(full_scan, "cron", hour="8,12,17", minute=0)
 scheduler.start()
