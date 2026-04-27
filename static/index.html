@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EmiRise Scout">
+<title>EmiRise Scout</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Cabinet+Grotesk:wght@400;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f5f2eb;--surface:#fff;--border:#d8d3c8;--ink:#1a1814;--ink2:#5a5650;--ink3:#9a9690;--red:#d4380d;--blue:#1a4480;--green:#1a6b3c}
+body{background:var(--bg);color:var(--ink);font-family:'DM Mono',monospace;min-height:100vh;padding:20px 16px 100px}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}
+.eyebrow{font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--ink3);margin-bottom:4px}
+h1{font-family:'Cabinet Grotesk',sans-serif;font-size:26px;font-weight:800;letter-spacing:-0.02em}
+h1 em{color:var(--red);font-style:normal}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:100px;border:1.5px solid var(--border);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink3);background:var(--surface)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.scanning .dot{animation:blink 0.8s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+.zone{background:var(--ink);color:#f5f2eb;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:11px;line-height:1.6}
+.zone strong{font-family:'Cabinet Grotesk',sans-serif;font-size:13px;font-weight:700;display:block;margin-bottom:2px}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px}
+.stat{background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:12px 14px}
+.stat-n{font-family:'Cabinet Grotesk',sans-serif;font-size:28px;font-weight:800;line-height:1}
+.stat-n.r{color:var(--red)}.stat-n.b{color:var(--blue)}.stat-n.g{color:var(--green)}
+.stat-l{font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink3);margin-top:4px}
+.actions{display:flex;gap:8px;margin-bottom:16px}
+.btn{flex:1;padding:12px;border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;border:1.5px solid;transition:all 0.15s;text-align:center}
+.btn-scan{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn-clear{background:var(--surface);color:var(--ink3);border-color:var(--border)}
+.btn:disabled{opacity:0.4}
+.log{background:var(--ink);color:#a8c98a;border-radius:6px;padding:10px 12px;font-size:10px;margin-bottom:16px;min-height:34px;display:flex;align-items:center;gap:8px}
+.log-p{color:#f5c842;flex-shrink:0}
+.tabs{display:flex;gap:2px;background:#e8e4db;border-radius:8px;padding:3px;margin-bottom:14px}
+.tab{flex:1;padding:8px;border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;cursor:pointer;border:none;background:transparent;color:var(--ink3);transition:all 0.15s;letter-spacing:0.06em}
+.tab.active{background:var(--surface);color:var(--ink);font-weight:500}
+.cards{display:grid;gap:12px}
+.card{background:var(--surface);border:1.5px solid var(--border);border-radius:10px;overflow:hidden;transition:all 0.2s;animation:cardIn 0.3s ease}
+@keyframes cardIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.card.is-new{border-left:4px solid var(--red)}
+.card.is-few{border-left:4px solid var(--blue)}
+.card-img{width:100%;height:160px;object-fit:cover;background:#e8e4db;display:block}
+.card-img-placeholder{width:100%;height:120px;background:linear-gradient(135deg,#e8e4db,#d8d3c8);display:flex;align-items:center;justify-content:center;font-size:32px}
+.card-body{padding:14px}
+.card-tags{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.tag{padding:3px 8px;border-radius:4px;font-size:9px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase}
+.tag.new{background:#fff0ed;color:var(--red)}
+.tag.few{background:#eef3fa;color:var(--blue)}
+.tag.price{background:#f0f7f2;color:var(--green)}
+.card-date{font-size:10px;color:var(--ink3);margin-bottom:10px}
+.btn-airbnb{display:block;width:100%;padding:11px;background:var(--ink);color:var(--bg);border:none;border-radius:6px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;text-align:center;text-decoration:none;cursor:pointer}
+.empty{text-align:center;padding:60px 20px;color:var(--ink3);font-size:12px;line-height:2}
+.empty-icon{font-size:40px;margin-bottom:12px;opacity:0.3}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="eyebrow">EmiRise · Prospection</div>
+    <h1>Airbnb<em>Scout</em></h1>
+  </div>
+  <div class="chip" id="chip"><div class="dot"></div><span id="chipTxt">Chargement</span></div>
+</div>
+
+<div class="zone">
+  <strong>📍 Aix-en-Provence — Centre historique complet</strong>
+  Mazarin · Prêcheurs · Cardeurs · Cours Mirabeau · 100€+/nuit · Logements entiers
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-n r" id="sNew">0</div><div class="stat-l">Nouvelles</div></div>
+  <div class="stat"><div class="stat-n b" id="sFew">0</div><div class="stat-l">&lt;15 avis</div></div>
+  <div class="stat"><div class="stat-n g" id="sTotal">0</div><div class="stat-l">Total</div></div>
+</div>
+
+<div class="actions">
+  <button class="btn btn-scan" id="btnScan" onclick="scan()">↻ Scanner</button>
+  <button class="btn btn-clear" onclick="clearAll()">✕ Vider</button>
+</div>
+
+<div class="log"><span class="log-p">$</span><span id="logTxt">Prêt.</span></div>
+
+<div class="tabs">
+  <button class="tab active" onclick="setTab('all',this)">Toutes</button>
+  <button class="tab" onclick="setTab('new',this)">Nouvelles</button>
+  <button class="tab" onclick="setTab('few',this)">&lt;15 avis</button>
+</div>
+
+<div class="cards" id="cards"></div>
+
+<script>
+let all=[], tab='all', scanning=false;
+
+async function load(){
+  try{
+    const [lr,sr]=await Promise.all([fetch('/api/listings'),fetch('/api/status')]);
+    all=await lr.json();
+    const st=await sr.json();
+    document.getElementById('sNew').textContent=st.new||0;
+    document.getElementById('sFew').textContent=st.few||0;
+    document.getElementById('sTotal').textContent=st.total||0;
+    render();
+    if(!scanning){
+      document.getElementById('chipTxt').textContent='Actif';
+      document.getElementById('chip').classList.remove('scanning');
+    }
+  }catch(e){log('Erreur connexion serveur');}
+}
+
+function render(){
+  const list=tab==='new'?all.filter(l=>l.is_new):tab==='few'?all.filter(l=>!l.is_new):all;
+  const c=document.getElementById('cards');
+  if(!list.length){
+    c.innerHTML='<div class="empty"><div class="empty-icon">◎</div>Aucune annonce détectée.<br>Lance un scan manuel<br>ou attends le scan auto (8h/12h/17h)</div>';
+    return;
+  }
+  c.innerHTML=list.map(l=>`
+    <div class="card ${l.is_new?'is-new':'is-few'}">
+      ${l.image?`<img class="card-img" src="${l.image}" onerror="this.style.display='none'" loading="lazy">`:`<div class="card-img-placeholder">🏠</div>`}
+      <div class="card-body">
+        <div class="card-tags">
+          ${l.is_new?'<span class="tag new">★ Nouvelle annonce</span>':''}
+          ${!l.is_new&&l.reviews!=null?`<span class="tag few">${l.reviews} avis</span>`:''}
+          ${l.price?`<span class="tag price">${l.price}</span>`:''}
+        </div>
+        <div class="card-date">Détectée le ${l.detectedAt}</div>
+        <a href="${l.url}" target="_blank" class="btn-airbnb">Ouvrir sur Airbnb ↗</a>
+      </div>
+    </div>`).join('');
+}
+
+function setTab(t,el){
+  tab=t;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+async function scan(){
+  if(scanning)return;
+  scanning=true;
+  document.getElementById('btnScan').disabled=true;
+  document.getElementById('chip').classList.add('scanning');
+  document.getElementById('chipTxt').textContent='Scan...';
+  log('Scan en cours — peut prendre 3-5 min...');
+  try{
+    await fetch('/api/scan',{method:'POST'});
+    const poll=setInterval(async()=>{
+      await load();
+    },30000);
+    setTimeout(()=>{
+      clearInterval(poll);
+      scanning=false;
+      document.getElementById('btnScan').disabled=false;
+      document.getElementById('chip').classList.remove('scanning');
+      document.getElementById('chipTxt').textContent='Actif';
+      log('Scan terminé.');
+    },360000);
+  }catch(e){
+    scanning=false;
+    document.getElementById('btnScan').disabled=false;
+    log('Erreur lors du scan.');
+  }
+}
+
+async function clearAll(){
+  if(!confirm('Vider toutes les annonces ?'))return;
+  await fetch('/api/clear',{method:'POST'});
+  all=[];
+  document.getElementById('sNew').textContent=0;
+  document.getElementById('sFew').textContent=0;
+  document.getElementById('sTotal').textContent=0;
+  render();
+  log('Historique vidé.');
+}
+
+function log(msg){
+  document.getElementById('logTxt').textContent='['+new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})+'] '+msg;
+}
+
+load();
+setInterval(load,60000);
+</script>
+</body>
+</html>
